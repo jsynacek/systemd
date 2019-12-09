@@ -23,5 +23,6 @@ DEFINE_TRIVIAL_CLEANUP_FUNC(UdevRules*, udev_rules_free);
 bool udev_rules_check_timestamp(UdevRules *rules);
 int udev_rules_apply_to_event(UdevRules *rules, UdevEvent *event,
                               usec_t timeout_usec,
-                              Hashmap *properties_list);
+                              Hashmap *properties_list,
+                              FILE *flog);
 int udev_rules_apply_static_dev_perms(UdevRules *rules);

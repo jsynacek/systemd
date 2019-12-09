@@ -74,6 +74,7 @@ static ResolveNameTiming arg_resolve_name_timing = RESOLVE_NAME_EARLY;
 static unsigned arg_children_max = 0;
 static usec_t arg_exec_delay_usec = 0;
 static usec_t arg_event_timeout_usec = 180 * USEC_PER_SEC;
+static bool arg_trace_time = true;
 
 typedef struct Manager {
         sd_event *event;
@@ -386,7 +387,9 @@ static int worker_lock_block_device(sd_device *dev, int *ret_fd) {
 static int worker_process_device(Manager *manager, sd_device *dev) {
         _cleanup_(udev_event_freep) UdevEvent *udev_event = NULL;
         _cleanup_close_ int fd_lock = -1;
+        _cleanup_fclose_ FILE *flog = NULL;
         DeviceAction action;
+        const char *devpath, *logpath;
         uint64_t seqnum;
         int r;
 
@@ -412,12 +415,23 @@ static int worker_process_device(Manager *manager, sd_device *dev) {
         if (r < 0)
                 return r;
 
+        r = sd_device_get_devpath(dev, &devpath);
+        /* TODO check r */
+        logpath = strjoina("/run/udev/log", devpath);
+        r = mkdir_parents(logpath, 0755);
+        /* TODO check r */
+        flog = fopen(logpath, "a");
+        if (flog == NULL)
+                return log_device_warning_errno(dev, -errno, "Failed to open device log '%s': %m", logpath);
+        /* Turn off buffering to not lose anything. Do we really want this? */
+        setbuf(flog, NULL);
+
         /* apply rules, create node, symlinks */
-        r = udev_event_execute_rules(udev_event, arg_event_timeout_usec, manager->properties, manager->rules);
+        r = udev_event_execute_rules(udev_event, arg_event_timeout_usec, arg_trace_time, manager->properties, manager->rules, flog);
         if (r < 0)
                 return r;
 
-        udev_event_execute_run(udev_event, arg_event_timeout_usec);
+        udev_event_execute_run(udev_event, arg_event_timeout_usec, arg_trace_time);
 
         if (!manager->rtnl)
                 /* in case rtnl was initialized */

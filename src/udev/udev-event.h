@@ -58,9 +58,11 @@ int udev_event_spawn(UdevEvent *event,
                      const char *cmd, char *result, size_t ressize);
 int udev_event_execute_rules(UdevEvent *event,
                              usec_t timeout_usec,
+                             bool trace_time,
                              Hashmap *properties_list,
-                             UdevRules *rules);
-void udev_event_execute_run(UdevEvent *event, usec_t timeout_usec);
+                             UdevRules *rules,
+                             FILE *flog);
+void udev_event_execute_run(UdevEvent *event, usec_t timeout_usec, bool trace_time);
 
 static inline usec_t udev_warn_timeout(usec_t timeout_usec) {
         return DIV_ROUND_UP(timeout_usec, 3);

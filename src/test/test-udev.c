@@ -122,8 +122,8 @@ static int run(int argc, char *argv[]) {
                 }
         }
 
-        udev_event_execute_rules(event, 3 * USEC_PER_SEC, NULL, rules);
-        udev_event_execute_run(event, 3 * USEC_PER_SEC);
+        udev_event_execute_rules(event, 3 * USEC_PER_SEC, false, NULL, rules, NULL);
+        udev_event_execute_run(event, 3 * USEC_PER_SEC, false);
 
         return 0;
 }

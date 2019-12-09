@@ -870,7 +870,8 @@ static void event_execute_rules_on_remove(
                 UdevEvent *event,
                 usec_t timeout_usec,
                 Hashmap *properties_list,
-                UdevRules *rules) {
+                UdevRules *rules,
+                FILE *flog) {
 
         sd_device *dev = event->dev;
         int r;
@@ -890,7 +891,7 @@ static void event_execute_rules_on_remove(
         if (sd_device_get_devnum(dev, NULL) >= 0)
                 (void) udev_watch_end(dev);
 
-        (void) udev_rules_apply_to_event(rules, event, timeout_usec, properties_list);
+        (void) udev_rules_apply_to_event(rules, event, timeout_usec, properties_list, flog);
 
         if (sd_device_get_devnum(dev, NULL) >= 0)
                 (void) udev_node_remove(dev);
@@ -917,11 +918,14 @@ static int udev_event_on_move(UdevEvent *event) {
 
 int udev_event_execute_rules(UdevEvent *event,
                              usec_t timeout_usec,
+                             bool trace_time,
                              Hashmap *properties_list,
-                             UdevRules *rules) {
+                             UdevRules *rules,
+                             FILE *flog) {
         const char *subsystem;
         DeviceAction action;
         sd_device *dev;
+        usec_t usec;
         int r;
 
         assert(event);
@@ -929,6 +933,7 @@ int udev_event_execute_rules(UdevEvent *event,
 
         dev = event->dev;
 
+        usec = now(CLOCK_MONOTONIC);
         r = sd_device_get_subsystem(dev, &subsystem);
         if (r < 0)
                 return log_device_error_errno(dev, r, "Failed to get subsystem: %m");
@@ -938,7 +943,7 @@ int udev_event_execute_rules(UdevEvent *event,
                 return log_device_error_errno(dev, r, "Failed to get ACTION: %m");
 
         if (action == DEVICE_ACTION_REMOVE) {
-                event_execute_rules_on_remove(event, timeout_usec, properties_list, rules);
+                event_execute_rules_on_remove(event, timeout_usec, properties_list, rules, flog);
                 return 0;
         }
 
@@ -956,7 +961,7 @@ int udev_event_execute_rules(UdevEvent *event,
                         return r;
         }
 
-        r = udev_rules_apply_to_event(rules, event, timeout_usec, properties_list);
+        r = udev_rules_apply_to_event(rules, event, timeout_usec, properties_list, flog);
         if (r < 0)
                 return log_device_debug_errno(dev, r, "Failed to apply udev rules: %m");
 
@@ -983,18 +988,22 @@ int udev_event_execute_rules(UdevEvent *event,
                 return log_device_debug_errno(dev, r, "Failed to update database under /run/udev/data/: %m");
 
         device_set_is_initialized(dev);
+        log_device_info(dev, "Initialization took " USEC_FMT " usec",
+                        (int64_t) now(CLOCK_MONOTONIC) - (int64_t) usec);
 
         event->dev_db_clone = sd_device_unref(event->dev_db_clone);
 
         return 0;
 }
 
-void udev_event_execute_run(UdevEvent *event, usec_t timeout_usec) {
+void udev_event_execute_run(UdevEvent *event, usec_t timeout_usec, bool trace_time) {
         const char *command;
         void *val;
         Iterator i;
+        usec_t usec;
         int r;
 
+        usec = now(CLOCK_MONOTONIC);
         ORDERED_HASHMAP_FOREACH_KEY(val, command, event->run_list, i) {
                 UdevBuiltinCommand builtin_cmd = PTR_TO_UDEV_BUILTIN_CMD(val);
 
@@ -1020,4 +1029,6 @@ void udev_event_execute_run(UdevEvent *event, usec_t timeout_usec) {
                                 log_device_debug(event->dev, "Command \"%s\" returned %d (error), ignoring.", command, r);
                 }
         }
+        log_device_info(event->dev, "Executing RUN took " USEC_FMT " usec",
+                        (int64_t) now(CLOCK_MONOTONIC) - (int64_t) usec);
 }
